@@ -38,26 +38,31 @@ func findColumn(t *Table, name string, c *Counter) *Column {
 // Scan 按谓词筛选并返回投影列。
 func Scan(t *Table, project []string, predCol, predVal string, c *Counter) [][]KV {
 	col := findColumn(t, predCol, c)
+	if col == nil {
+		return nil
+	}
+	match := map[int]bool{}
+	for code, text := range col.Dict {
+		c.Scanned++
+		if text == predVal {
+			match[code] = true
+		}
+	}
+	proj := make([]*Column, 0, len(project))
+	for _, name := range project {
+		if pc := findColumn(t, name, c); pc != nil {
+			proj = append(proj, pc)
+		}
+	}
 	out := [][]KV{}
 	for i := 0; i < t.Rows; i++ {
 		c.Scanned++
-		predCode := -1
-		if col != nil {
-			for code, text := range col.Dict {
-				c.Scanned++
-				if text == predVal {
-					predCode = code
-					break
-				}
-			}
-		}
-		if col != nil && col.Codes[i] != predCode {
+		if !match[col.Codes[i]] {
 			continue
 		}
-		row := []KV{}
-		for _, cc := range t.Columns {
-			c.Scanned++
-			row = append(row, KV{Name: cc.Name, Value: cc.Dict[cc.Codes[i]]})
+		row := make([]KV, 0, len(proj))
+		for _, pc := range proj {
+			row = append(row, KV{Name: pc.Name, Value: pc.Dict[pc.Codes[i]]})
 		}
 		out = append(out, row)
 	}
